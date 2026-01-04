@@ -14,4 +14,3 @@ jobs:
       with:
         esp_idf_version: v5.5
         target: esp32
-        path: 'hello'
