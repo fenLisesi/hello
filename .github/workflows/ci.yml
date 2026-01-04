@@ -2,9 +2,7 @@ name: Build
 
 on:
   push:
-    branches: [ master ]
-  pull_request:
-    branches: [ $default-branch ]
+    branches: [ main ]
 
 jobs:
   build:
