@@ -1,4 +1,4 @@
-name: Build
+name: ESP32 Build and Flash
 
 on:
   push:
@@ -7,10 +7,54 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [esp32c3]
+
     steps:
     - uses: actions/checkout@v4
-    - name: Build ESP32 project
+    - name: Build ${{ matrix.target }} project
       uses: espressif/esp-idf-ci-action@v1
       with:
         esp_idf_version: v5.5
-        target: esp32
+        target: ${{ matrix.target }}
+        path: 'hello'
+    - name: Upload ${{ matrix.target }} build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.target }}-firmware
+        path: |
+          hello/build/bootloader/bootloader.bin
+          hello/build/partition_table/partition-table.bin
+          hello/build/hello.bin
+          hello/build/flash_args
+
+  flash:
+    needs: build
+    runs-on: self-hosted
+    strategy:
+      matrix:
+        target: [esp32c3]
+    steps:
+    - name: Download ${{ matrix.target }} build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ matrix.target }}-firmware
+        path: ./firmware
+    - name: Flash firmware to ${{ matrix.target }}
+      run: |
+        cd firmware
+        esptool --chip ${{ matrix.target }} -b 460800 --before default_reset --after hard_reset write_flash "@flash_args" > ../${{ matrix.target }}_flash_log.txt 2>&1
+    - name: Monitor ${{ matrix.target }} serial output
+      run: |
+        sleep 3
+        PORT=$(grep "Serial port" ${{ matrix.target }}_flash_log.txt | cut -d' ' -f3 | tr -d ':')
+        timeout 10s unbuffer python3 -m esp_idf_monitor --port $PORT > ${{ matrix.target }}_monitor_log.txt 2>&1 || true
+    - name: Upload ${{ matrix.target }} logs
+      uses: actions/upload-artifact@v4
+      if: always()  # Upload logs even if previous steps failed
+      with:
+        name: ${{ matrix.target }}-logs
+        path: |
+          ${{ matrix.target }}_flash_log.txt
+          ${{ matrix.target }}_monitor_log.txt
